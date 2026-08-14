@@ -1,5 +1,7 @@
 # Task Doc — AI Image Understanding & Content Matching Engine
- 
+
+Document that details the problem of the task and stack decisions.
+
 ## 1. Problem
  
 Given a library of images and a set of blog posts, understand what each image

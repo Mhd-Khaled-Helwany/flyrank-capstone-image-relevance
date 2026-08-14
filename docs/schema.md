@@ -1,5 +1,7 @@
 # Schema Doc — AI Image Understanding & Content Matching Engine
 
+Document that details design decisions for image metadata and database schemas.
+
 ## 1. Image tag schema — the vision model's output contract
  
 This is the schema referenced in §4 and §8 of the brief ("the tag JSON
