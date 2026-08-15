@@ -3,72 +3,94 @@
 Document that details design decisions for matching strategy and guard rules.
 
 ## 1. Matching strategy
- 
+
 Per §4.2 and the glossary, ranking uses **cosine similarity** between
 `image_vectors` and a post's `post_vectors` entry — this is fixed by the
 brief, not a choice. Both are embedded with the Gemini embeddings API using
 the `SEMANTIC_SIMILARITY` task type, so captions and post text land in a
 comparable space (the brief's own test: "red fox," "Vulpes vulpes," and
 "wild fox species" must rank close despite sharing no words).
- 
+
 Flow for `GET /posts/:id/images`:
- 
+
 1. Embed the post text (or reuse the stored `post_vectors` row).
 2. Rank all images by cosine similarity against that vector — highest first.
 3. Walk down the ranked list, evaluating each candidate against the guard
-    in order, until one **passes** or the top 5 candidates have all been
+   (§2) in order, until one **passes** or the top 5 candidates have all been
    rejected.
 4. First passing candidate → suggested image, with its similarity score and
    the guard's reasoning attached.
 5. If nothing in the top 5 passes → post-level answer is `no_confident_match`
-   , never a forced weak top-1.
+   (§2), never a forced weak top-1.
+
 Capping the walk at the top 5 keeps this cheap at ~50 images while still
 giving the guard a real chance to skip past a wrongly-ranked outlier (the
 Probe 3 scenario), rather than only ever judging the single top-ranked
 candidate.
- 
+
 ## 2. Mismatch guard rules
- 
+
 Per §4.3, the guard combines tag validation, similarity threshold, and
 confidence into a single per-candidate check. It's a pure function —
 `evaluate_candidate(post, image) → {result, reason}` — reused both during
-the ranking walk and by the review API's "inspect why an image was
+the ranking walk (§1) and by the review API's "inspect why an image was
 selected or refused" endpoint (§4.5), so the explanation logic only lives
 in one place.
- 
-Three gates, checked in order, first failure wins:
- 
-1. **Category match.** Extract the set of categories mentioned in the post
-   text via a keyword scan against the known category enum (case-insensitive
-   substring match, e.g. does "fox" appear in the post?). If the candidate's
-   `category` is not in that set → `REJECTED`, reason:
-   `"Category mismatch: expected {post categories}, detected {candidate
-   category}"`. This is the exact fox/wolf scenario from §4.3 and Probe 3.
+
+Since the corpus can span multiple domains (`category`: animal, plant,
+vehicle, furniture...) and `subject` is the specific item within a category
+(`category: animal` → `subject: red fox` or `subject: wolf`), a category
+match alone isn't enough to catch the brief's own fox/wolf scenario — two
+candidates can share a category and still be the wrong thing. So the guard
+runs **category as a coarse gate, then subject as a fine gate**, before
+confidence and similarity:
+
+Four gates, checked in order, first failure wins:
+
+1. **Category match (coarse).** Extract the set of categories mentioned in
+   the post text via a keyword scan against the known category enum
+   (case-insensitive substring match). If the candidate's `category` is not
+   in that set → `REJECTED`, reason: `"Category mismatch: expected {post
+   categories}, detected {candidate category}"`. Catches the wrong-domain
+   case — a furniture photo on a plant post.
    - If the post text contains **no** recognized category keyword at all,
      the expected set is empty and every candidate fails this gate by
      definition — that post can never produce an `accepted` suggestion,
      only `no_confident_match`.
-2. **Tag confidence.** If the candidate's `confidence` is below the
-   `needs_review` threshold (§7, TBD from eval data), it's untrusted data
-   and shouldn't be surfaced regardless of category match → `REJECTED`,
-   reason: `"Tag confidence too low to trust"`.
-3. **Similarity threshold.** If cosine similarity is below the tuned
-   threshold (§7, TBD from eval data) → `REJECTED`, reason:
+2. **Subject match (fine).** Extract the set of subjects mentioned in the
+   post text via a keyword scan against the known subject enum. If the post
+   names at least one recognized subject and the candidate's `subject` is
+   not in that set → `REJECTED`, reason: `"Subject mismatch: expected {post
+   subjects}, detected {candidate subject}"`. This is the exact fox/wolf
+   scenario from §4.3 and Probe 3, and matches the wording Probe 4 and §13's
+   demo script both use ("subjects don't match" / "detected subjects do not
+   match article topic").
+   - If the post names **no** recognized subject (only a category-level
+     term, e.g. "garden plants" without naming a species), this gate is
+     skipped rather than auto-failed — there's nothing specific to hold the
+     candidate to, so the category-level match from gate 1 is the best
+     available signal.
+3. **Tag confidence.** If the candidate's `confidence` is below the
+   `needs_review` threshold (§3, TBD from eval data), it's untrusted data
+   and shouldn't be surfaced regardless of category/subject match →
+   `REJECTED`, reason: `"Tag confidence too low to trust"`.
+4. **Similarity threshold.** If cosine similarity is below the tuned
+   threshold (§3, TBD from eval data) → `REJECTED`, reason:
    `"Similarity below threshold"`.
-4. All three gates pass → `ACCEPTED`.
+5. All four gates pass → `ACCEPTED`.
 
 **Post-level aggregation** (what the API actually returns for
 `GET /posts/:id/images`):
- 
+
 - First candidate in the ranked walk that gets `ACCEPTED` → returned as the
   suggestion.
 - If every candidate in the top 5 is `REJECTED` → the post-level result is
-  `no_confident_match`, per §4.3 and Probe 4 — this covers both failure
-  modes the brief names explicitly: **"subjects don't match"** (all
-  candidates failed gate 1) and **"similarity below threshold"** (best
-  candidate passed gates 1–2 but failed gate 3). The reason surfaced to the
-  post is drawn from the top-ranked candidate's specific rejection reason,
-  since that candidate is the closest the system got.
+  `no_confident_match`, per §4.3 and Probe 4 — this covers the failure modes
+  the brief names explicitly: **"subjects don't match"** (candidates failed
+  gate 1 or gate 2) and **"similarity below threshold"** (best candidate
+  passed gates 1–3 but failed gate 4). The reason surfaced to the post is
+  drawn from the top-ranked candidate's specific rejection reason, since
+  that candidate is the closest the system got.
 - A single forced candidate (Probe 3's scenario) still returns its own
   `REJECTED` result directly from `evaluate_candidate` — the review API can
   call this on any specific (post, image) pair without going through the

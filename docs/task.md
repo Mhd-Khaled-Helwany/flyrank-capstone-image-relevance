@@ -3,18 +3,18 @@
 Document that details the problem of the task and stack decisions.
 
 ## 1. Problem
- 
+
 Given a library of images and a set of blog posts, understand what each image
 actually depicts, and match each post to the image that best represents its
 content — based on meaning, not filenames or keywords. When no image is a
 confident enough match, say so explicitly instead of guessing. The
 production-critical piece is not finding a match, it's refusing a bad one
 (the "mismatch guard").
- 
+
 ## 2. Stack decisions
- 
+
 These are locked in to keep third-party overhead minimal:
- 
+
 | Concern | Choice | Why |
 |---|---|---|
 | Language | Python (+ FastAPI) | Chosen lane for this capstone |
@@ -25,4 +25,12 @@ These are locked in to keep third-party overhead minimal:
 | Vectors | JSON-encoded float arrays (SQLite has no native array/vector type) | No `pgvector` needed either — cosine similarity is computed in Python over ~50 rows, which is trivial at this scale |
 | Schema validation | Pydantic | `model_validate_json()` rejects malformed vision output before it's trusted |
 | Corpus | Unsplash / Pexels licensed-free images | Required by §3 of the brief; committed or fetched via a seed script |
- 
+
+## 3. Non-goals
+
+Per §3's ground rules, the Phase 1 design doc needs one explicit non-goal:
+
+- **Not multi-tenant.** This is a single-user system — no per-tenant data
+  isolation, no user accounts beyond whatever minimal auth the review
+  workflow needs. Every post, image, and suggestion belongs to the same
+  single owner.
