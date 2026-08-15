@@ -56,6 +56,7 @@ Three gates, checked in order, first failure wins:
    threshold (§7, TBD from eval data) → `REJECTED`, reason:
    `"Similarity below threshold"`.
 4. All three gates pass → `ACCEPTED`.
+
 **Post-level aggregation** (what the API actually returns for
 `GET /posts/:id/images`):
  

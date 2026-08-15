@@ -52,10 +52,35 @@ One row per image, independent of any AI processing.
 | `id` | PK | |
 | `image_data` | bytea / array | in-DB storage per decision in task.md |
 | `filename` | text | original filename |
+| `author` | text | photographer credit, from Unsplash/Pexels |
 | `source_url` | text | Unsplash/Pexels source, for license traceability |
 | `license` | text | e.g. "Unsplash License" |
 | `created_at` | timestamp | |
  
+### Corpus storage (pre-ingestion)
+ 
+Before the seed script loads anything into the DB, the raw corpus lives in
+the repo as plain files, per §3/§11's reproducibility rules:
+ 
+- `data/images/` — the actual image files, renamed to stable slugs
+  (`fox_01.jpg`) as they're downloaded. Kept under a few MB total by using
+  Unsplash/Pexels' "regular"/"small" download size, not full resolution
+  (§11: don't commit datasets over a few MB).
+- `data/manifest.csv` — one row per image: `filename, author, source_url,
+  license`. This is the reproducibility artifact itself, and the seed
+  script's input for populating the `images` table.
+### `posts`
+One row per blog post — the other half of the matching problem. Not
+explicitly listed in §4's five parts, but required by §6's Definition of
+Done ("database models for... posts") and by `post_vectors`' FK below.
+ 
+| Column | Type | Notes |
+|---|---|---|
+| `id` | PK | |
+| `title` | text | |
+| `body` | text | full post content — this is what gets embedded |
+| `created_at` | timestamp | |
+
 ### `image_metadata`
 The validated vision output, one row per successfully tagged image.
  
@@ -64,6 +89,7 @@ The validated vision output, one row per successfully tagged image.
 | `id` | PK | |
 | `image_id` | FK → images | |
 | `category` | enum | constrained vocabulary, see section 1 in this file |
+| `subject` | enum | constrained vocabulary, see section 1 in this file |
 | `subject` | enum | constrained vocabulary, see section 1 in this file |
 | `attributes` | text[] | free text |
 | `caption` | text | free text |
@@ -124,3 +150,30 @@ relationship that doesn't fit as a column on the metadata row.
 | `guard_reason` | text | human-readable explanation |
 | `review_status` | enum | `pending` \| `approved` \| `rejected` |
 | `created_at` | timestamp | |
+
+### Indexes
+ 
+§6's Definition of Done explicitly calls for "the required indexes," so
+these are part of the schema, not an afterthought:
+ 
+| Table | Index | Why |
+|---|---|---|
+| `image_metadata` | `image_id` (FK) | join back to `images` |
+| `image_metadata` | `category` | guard's category-match gate filters by this |
+| `image_vectors` | `image_id` (FK) | join back to `images` during ranking |
+| `post_vectors` | `post_id` (FK) | join back to `posts` |
+| `ai_call_log` | `image_id` (FK) | cost lookups per image |
+| `ai_call_log` | `created_at` | Probe 6 — cost log needs to be scanned/reported |
+| `suggestions` | `post_id` (FK) | `GET /posts/:id/images` looks these up |
+| `suggestions` | `image_id` (FK) | review API looks up by image too |
+| `suggestions` | `review_status` | review workflow queries pending items |
+ 
+### Constraints
+ 
+- **`suggestions.(post_id, image_id)` is unique.** Re-running the guard on
+  the same pair (e.g. re-ranking after new images are tagged) should update
+  the existing row, not create a duplicate. This also directly supports
+  Probe 3's "force this specific candidate" check being idempotent.
+- **`ON DELETE CASCADE`** from `images` → `image_metadata`, `image_vectors`,
+  and `suggestions`; from `posts` → `post_vectors` and `suggestions`. Deleting
+  an image or post shouldn't leave orphaned rows behind.
