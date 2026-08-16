@@ -1,0 +1,7 @@
+{
+  "subject": "red fox",
+  "category": "animal",
+  "attributes": ["orange fur", "wild", "forest"],
+  "caption": "A red fox standing in a forest",
+  "confidence": 0.94
+}

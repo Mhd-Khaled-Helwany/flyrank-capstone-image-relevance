@@ -25,17 +25,15 @@ one image — not the database table. See §2 below for how it's persisted.
   `furniture`. Since the corpus can span multiple domains, this is a real
   coarse filter: it catches a wildly wrong candidate (a furniture photo
   surfacing on a plant post) before the guard ever looks at species-level
-  detail. Small, fixed list — decided once the ~50-image corpus is
-  gathered.
+  detail. Small, fixed list where each image must only be assigned one item from it. List of categories: [animal|plant|vehicle|clothing|furniture|beverage|electronic device].
 - **`subject`** — closed vocabulary (Pydantic `Literal` / `Enum`), the
   specific item within that category — e.g. `red fox`, `wolf`, `oak tree`,
   `sedan`. Each `subject` belongs to exactly one `category`. This is the
   fine-grained field the mismatch guard depends on for exact comparison
   ("expected fox, detected wolf") — two candidates can share the same
   `category` (`animal`) and still need to be told apart, which `category`
-  alone can't do. Many possible values, decided alongside `category` once
-  the corpus is gathered.
-- **`attributes`** — stays free-text, list of strings. This only feeds the
+  alone can't do. Each image must be assigned only one item from the `subject` list which is the following: [bamboo|bed|belt|boat|bookshelf|bus|bush|cabinet|cactus|camera|car|cat|chair|coffee|deer|desk|flower|gaming console|gloves|grass|hat|headphones|horse|jacket|juice|laptop|microphone|milk|motorcycle|owl|pants|phone|plane|printer|red fox|shoes|smoothie|soda|sofa|squirrel|stool|t-shirt|tea|tiger|train|tree|truck|water|wheat|wolf]
+- **`attributes`** — free-text, list of strings. This only feeds the
   caption/embedding space, never exact-match guard logic, so it doesn't need
   a controlled vocabulary.
 - **`caption`** — free text, one sentence. Feeds the embedding.
@@ -76,7 +74,7 @@ Before the seed script loads anything into the DB, the raw corpus lives in
 the repo as plain files, per §3/§11's reproducibility rules:
 
 - `data/images/` — the actual image files, renamed to stable slugs
-  (`fox_01.jpg`) as they're downloaded. Kept under a few MB total by using
+  (`fox.jpg`) as they're downloaded. Kept under a few MB total by using
   Unsplash/Pexels' "regular"/"small" download size, not full resolution
   (§11: don't commit datasets over a few MB).
 - `data/manifest.csv` — one row per image: `filename, author, source_url,
