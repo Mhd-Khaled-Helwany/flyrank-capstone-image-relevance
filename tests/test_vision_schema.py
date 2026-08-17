@@ -21,7 +21,6 @@ def test_valid_payload_passes():
     assert tag.subject == 'red fox'
     assert tag.category == 'animal'
 
-
 def test_invalid_payload_fails_cleanly():
     payload = {
         'subject': 'red fox',
