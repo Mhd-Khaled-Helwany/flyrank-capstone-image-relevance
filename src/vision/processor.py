@@ -89,6 +89,8 @@ def process_batch(
     max_delay: float = 30.0,
     jitter: float = 0.75,
     rng: random.Random | None = None,
+    record_calls: bool = False,
+    call_recorder: Callable[[dict], None] | None = None,
 ) -> dict[str, Any]:
     """Process a batch of items while retrying only transient failures."""
     if max_retries < 0:
@@ -103,14 +105,57 @@ def process_batch(
         try_count = 0
         while True:
             try:
+                start = time.time()
                 result = worker(item)
+                duration_ms = int((time.time() - start) * 1000)
+                # allow worker to return metadata dict: {"value": ..., "input_tokens": int, "output_tokens": int, "model_name": str, "model_version": str}
+                if isinstance(result, dict) and "value" in result:
+                    result_value = result["value"]
+                    input_tokens = int(result.get("input_tokens", 0))
+                    output_tokens = int(result.get("output_tokens", 0))
+                    model_name = result.get("model_name")
+                    model_version = result.get("model_version")
+                else:
+                    result_value = result
+                    input_tokens = 0
+                    output_tokens = 0
+                    model_name = None
+                    model_version = None
                 attempts[item] = try_count + 1
-                results.append(result)
+                results.append(result_value)
+
+                if record_calls:
+                    record_fn = call_recorder or __import__("telemetry.call_logger", fromlist=["record_call"]).record_call
+                    rec = summarize_call_metrics(
+                        call_type="vision",
+                        status="success",
+                        image_id=None,
+                        model_name=model_name,
+                        model_version=model_version,
+                        input_tokens=input_tokens,
+                        output_tokens=output_tokens,
+                        duration_ms=duration_ms,
+                    )
+                    record_fn(rec)
                 break
             except Exception as exc:  # pragma: no cover - exercised via tests
                 if not should_retry_error(exc) or try_count >= max_retries:
                     failed.append((item, exc))
                     attempts[item] = try_count + 1
+                    if record_calls:
+                        record_fn = call_recorder or __import__("telemetry.call_logger", fromlist=["record_call"]).record_call
+                        rec = summarize_call_metrics(
+                            call_type="vision",
+                            status="failed",
+                            image_id=None,
+                            model_name=None,
+                            model_version=None,
+                            input_tokens=0,
+                            output_tokens=0,
+                            duration_ms=0,
+                            retry_count=try_count,
+                        )
+                        record_fn(rec)
                     break
 
                 retry_delay = compute_retry_delay(
