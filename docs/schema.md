@@ -137,16 +137,24 @@ Mirrors `image_vectors` for blog post content.
 ### `ai_call_log`
 Cost tracking lives here, not on `image_metadata` — a single image can
 generate multiple vision calls across retries, so cost is a 1-to-many
-relationship that doesn't fit as a column on the metadata row.
+relationship that doesn't fit as a column on the metadata row. Built in
+Phase 2 — this table already exists (`src/db/models.py`, migration `0001`).
 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | PK | |
-| `image_id` | FK → images (nullable) | null for post-embedding calls |
-| `call_type` | enum | `vision` \| `embedding` |
-| `status` | enum | `success` \| `retry` \| `failed` |
-| `cost_usd` | float | |
-| `tokens` | int (nullable) | |
+| `image_id` | int (nullable) | null for post-embedding calls |
+| `call_type` | text | `vision` \| `embedding` |
+| `status` | text | `success` \| `retry` \| `failed` |
+| `model_name` | text (nullable) | e.g. `gemini-3.7-flash` |
+| `model_version` | text (nullable) | |
+| `input_tokens` | int | default 0 |
+| `output_tokens` | int | default 0 |
+| `total_tokens` | int | default 0 |
+| `duration_ms` | int | default 0 |
+| `retry_count` | int | default 0 |
+| `cost_usd` | float | default 0.0 |
+| `meta` | json (nullable) | free-form extra context per call |
 | `created_at` | timestamp | |
 
 ### `suggestions` (review workflow, per §4.5)
@@ -192,8 +200,27 @@ these are part of the schema, not an afterthought:
 
 ### Migrations
 
-SQLAlchemy models + Alembic migrations, regardless of engine. This is what
-makes "schema as migrations" (§12 shared requirement #4) true from day one,
-and it's also what makes swapping SQLite → Postgres later a config change
-rather than a rewrite — directly serving the Architecture rubric dimension
-("swap the DB... without touching business logic").
+**Documented decision:** SQLAlchemy models + Alembic migrations, regardless
+of engine. This is what makes "schema as migrations" (§12 shared
+requirement #4) true from day one, and it's also what makes swapping
+SQLite → Postgres later a config change rather than a rewrite — directly
+serving the Architecture rubric dimension ("swap the DB... without
+touching business logic").
+ 
+**Actual state as of Phase 2 (needs a decision before Phase 3 adds six more
+tables):** no Alembic setup exists yet. What's in the repo instead is a
+hand-written `migrations/0001_create_ai_call_log.sql` *and*, separately,
+`scripts/init_db.py` calling `Base.metadata.create_all()` — two mechanisms
+that don't reference each other, neither of which is Alembic, and neither
+of which produces a versioned migration history that can be diffed or
+rolled back. Also: **no `CREATE INDEX` statements exist anywhere** — the
+indexes table below isn't actually reflected in the database yet.
+ 
+Before adding `images`, `posts`, `image_metadata`, `image_vectors`,
+`post_vectors`, and `suggestions` in Phase 3, pick one:
+- Set up real Alembic (`alembic init`, autogenerate migrations from the
+  models) — matches the documented decision, cleanest going forward.
+- Or drop the Alembic claim from task.md and commit to hand-written
+  numbered SQL files (`0002_create_images.sql`, etc.) as the actual
+  migration strategy — still satisfies "schema as migrations," just needs
+  the docs to say what's really happening instead of what was planned.

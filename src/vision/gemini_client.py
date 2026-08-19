@@ -4,15 +4,6 @@ import os
 import time
 from typing import Any
 
-def _load_pricing():
-    try:
-        in_cost = float(os.environ.get("COST_PER_1K_INPUT", "0.000075"))
-        out_cost = float(os.environ.get("COST_PER_1K_OUTPUT", "0.0003"))
-    except Exception:
-        in_cost = 0.000075
-        out_cost = 0.0003
-    return in_cost, out_cost
-
 def call_gemini_for_tag(prompt: str, model: str = "gemini-flash", timeout: int = 60, *, image_bytes: bytes | None = None) -> dict[str, Any]:
     """Call the Gemini model through the Google GenAI SDK and return metrics."""
     try:
@@ -69,7 +60,7 @@ def call_gemini_for_tag(prompt: str, model: str = "gemini-flash", timeout: int =
         input_tokens = int(getattr(usage, "prompt_token_count", 0) or 0)
         output_tokens = int(getattr(usage, "completion_token_count", 0) or 0)
 
-    in_cost, out_cost = _load_pricing()
+    in_cost, out_cost = 0.000075, 0.0003
     cost_usd = (input_tokens * in_cost + output_tokens * out_cost) / 1000.0
 
     return {
