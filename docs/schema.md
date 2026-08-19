@@ -207,20 +207,3 @@ SQLite → Postgres later a config change rather than a rewrite — directly
 serving the Architecture rubric dimension ("swap the DB... without
 touching business logic").
  
-**Actual state as of Phase 2 (needs a decision before Phase 3 adds six more
-tables):** no Alembic setup exists yet. What's in the repo instead is a
-hand-written `migrations/0001_create_ai_call_log.sql` *and*, separately,
-`scripts/init_db.py` calling `Base.metadata.create_all()` — two mechanisms
-that don't reference each other, neither of which is Alembic, and neither
-of which produces a versioned migration history that can be diffed or
-rolled back. Also: **no `CREATE INDEX` statements exist anywhere** — the
-indexes table below isn't actually reflected in the database yet.
- 
-Before adding `images`, `posts`, `image_metadata`, `image_vectors`,
-`post_vectors`, and `suggestions` in Phase 3, pick one:
-- Set up real Alembic (`alembic init`, autogenerate migrations from the
-  models) — matches the documented decision, cleanest going forward.
-- Or drop the Alembic claim from task.md and commit to hand-written
-  numbered SQL files (`0002_create_images.sql`, etc.) as the actual
-  migration strategy — still satisfies "schema as migrations," just needs
-  the docs to say what's really happening instead of what was planned.
