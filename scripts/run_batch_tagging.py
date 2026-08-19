@@ -12,6 +12,10 @@ import random
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from dotenv import load_dotenv
+
+load_dotenv(ROOT / ".env")
+
 from vision.schema import validate_tag_payload, TagSchema
 from vision.processor import process_batch, summarize_call_metrics
 from telemetry.call_logger import clear_calls, record_call
