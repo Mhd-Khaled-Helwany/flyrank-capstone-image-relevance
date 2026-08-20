@@ -185,16 +185,17 @@ def test_walk_all_rejected_yields_no_confident_match(monkeypatch):
     ]
     monkeypatch.setattr(guard, "rank_images_for_post", _rank(rows))
     result = suggest_for_post(None, _FakePost(FOX_TEXT))
-    assert result == {
-        "result": NO_CONFIDENT_MATCH,
-        "reason": "Similarity below threshold",
-    }
+    assert result["result"] == NO_CONFIDENT_MATCH
+    assert result["image"] is None
+    assert result["reason"] == "Similarity below threshold"
 
 
 def test_walk_empty_ranked_list(monkeypatch):
     monkeypatch.setattr(guard, "rank_images_for_post", _rank([]))
     result = suggest_for_post(None, _FakePost(FOX_TEXT))
-    assert result == {"result": NO_CONFIDENT_MATCH, "reason": "No embedded images to rank"}
+    assert result["result"] == NO_CONFIDENT_MATCH
+    assert result["image"] is None
+    assert result["reason"] == "No embedded images to rank"
 
 
 # --- end-to-end on simulated (in-memory) embeddings ------------------------

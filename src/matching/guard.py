@@ -101,6 +101,47 @@ def build_candidate(session: Session, post: Post, image_id: int) -> dict:
         "similarity": cosine_similarity(post_vector.embedding, image_vector.embedding),
     }
 
+def walk_candidates(
+    post_text: str,
+    ranked: list[dict],
+    *,
+    similarity_threshold: float = SIMILARITY_THRESHOLD,
+    confidence_threshold: float = REVIEW_CONFIDENCE_THRESHOLD,
+) -> dict:
+    """Run the guard over an already-ranked candidate list (§1 steps 3–5).
+
+    Returns `{"result", "suggestion", "reason", "verdicts"}` where `verdicts`
+    is the per-candidate guard result aligned with `ranked` (same order).
+    Used by `suggest_for_post` and by the API to attach a verdict to each
+    ranked candidate.
+    """
+    verdicts = [
+        evaluate_candidate(
+            post_text,
+            candidate,
+            similarity_threshold=similarity_threshold,
+            confidence_threshold=confidence_threshold,
+        )
+        for candidate in ranked
+    ]
+    for candidate, verdict in zip(ranked, verdicts):
+        if verdict["result"] == ACCEPTED:
+            return {"result": ACCEPTED, "suggestion": candidate, "reason": None, "verdicts": verdicts}
+
+    if not ranked:
+        return {
+            "result": NO_CONFIDENT_MATCH,
+            "reason": "No embedded images to rank",
+            "suggestion": None,
+            "verdicts": [],
+        }
+    return {
+        "result": NO_CONFIDENT_MATCH,
+        "reason": verdicts[0]["reason"],
+        "suggestion": None,
+        "verdicts": verdicts,
+    }
+
 def suggest_for_post(
     session: Session,
     post: Post,
@@ -115,23 +156,10 @@ def suggest_for_post(
     `no_confident_match` with the top-ranked candidate's rejection reason.
     """
     ranked = rank_images_for_post(session, post.id, limit=top_n)
-    for candidate in ranked:
-        verdict = evaluate_candidate(
-            post.body,
-            candidate,
-            similarity_threshold=similarity_threshold,
-            confidence_threshold=confidence_threshold,
-        )
-        if verdict["result"] == ACCEPTED:
-            return {"result": ACCEPTED, "image": candidate, "reason": None}
-
-    if not ranked:
-        return {"result": NO_CONFIDENT_MATCH, "reason": "No embedded images to rank"}
-
-    reason = evaluate_candidate(
+    out = walk_candidates(
         post.body,
-        ranked[0],
+        ranked,
         similarity_threshold=similarity_threshold,
         confidence_threshold=confidence_threshold,
-    )["reason"]
-    return {"result": NO_CONFIDENT_MATCH, "reason": reason}
+    )
+    return {"result": out["result"], "image": out["suggestion"], "reason": out["reason"]}
