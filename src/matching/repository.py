@@ -111,3 +111,13 @@ def get_images_with_metadata(session: Session) -> list[tuple[Image, ImageMetadat
         .order_by(Image.id)
         .all()
     )
+
+def get_image_vectors_with_details(session: Session) -> list[tuple[ImageVector, Image, ImageMetadata]]:
+    """Return every embedded+tagged image as (vector, image, metadata) triples."""
+    return (
+        session.query(ImageVector, Image, ImageMetadata)
+        .join(Image, Image.id == ImageVector.image_id)
+        .join(ImageMetadata, ImageMetadata.image_id == ImageVector.image_id)
+        .order_by(ImageVector.image_id)
+        .all()
+    )
