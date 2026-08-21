@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Optional
+from typing import Literal, Optional
 from pydantic import BaseModel
 
 class RankedCandidate(BaseModel):
@@ -45,3 +45,49 @@ class HealthResponse(BaseModel):
     embedded_images: int
     posts: int
     embedded_posts: int
+
+class SuggestionCreate(BaseModel):
+    """Request body for POST /review/suggestions — materialize a post's suggestion."""
+
+    post_id: int
+
+class DecisionCreate(BaseModel):
+    """Request body for POST /review/suggestions/{id}/decision."""
+
+    decision: Literal["approved", "rejected"]
+    reason: Optional[str] = None
+    reviewer: Optional[str] = None
+
+class DecisionOut(BaseModel):
+    """One entry in the review trail."""
+
+    id: int
+    suggestion_id: int
+    decision: str
+    reason: Optional[str] = None
+    reviewer: Optional[str] = None
+
+class GuardVerdict(BaseModel):
+    """The guard's fresh verdict for a suggested pair — why it was selected."""
+
+    result: str
+    reason: Optional[str] = None
+
+class SuggestionOut(BaseModel):
+    """One row of the review admin table."""
+
+    id: int
+    post_id: int
+    image_id: int
+    status: str
+    similarity: float
+    confidence: float
+    subject: str
+    category: str
+    caption: str
+
+class SuggestionDetail(SuggestionOut):
+    """Suggestion plus the inspect-why verdict and its decision trail."""
+
+    why: GuardVerdict
+    decisions: list[DecisionOut] = []

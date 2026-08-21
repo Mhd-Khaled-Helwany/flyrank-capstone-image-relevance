@@ -120,3 +120,44 @@ class PostVector(Base):
     embedding = Column(JSON, nullable=False)
     model_name = Column(String(128), nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+class Suggestion(Base):
+    """A suggested (post, image) pairing produced by the matching flow,
+    awaiting human review via the Review API."""
+
+    __tablename__ = "suggestions"
+    __table_args__ = (
+        UniqueConstraint("post_id", "image_id", name="uq_suggestions_post_image"),
+    )
+
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+    id = Column(Integer, primary_key=True)
+    post_id = Column(Integer, ForeignKey("posts.id", ondelete="CASCADE"), nullable=False, index=True)
+    image_id = Column(Integer, ForeignKey("images.id", ondelete="CASCADE"), nullable=False, index=True)
+    status = Column(String(16), nullable=False, default=PENDING, index=True)
+    similarity = Column(Float, nullable=False, default=0.0)
+    confidence = Column(Float, nullable=False, default=0.0)
+    subject = Column(String(64), nullable=False)
+    category = Column(String(64), nullable=False)
+    caption = Column(Text, nullable=False)
+    similarity_threshold = Column(Float, nullable=True)
+    confidence_threshold = Column(Float, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+class ReviewDecision(Base):
+    """One entry in the append-only review trail: an approval or rejection."""
+
+    __tablename__ = "review_decisions"
+
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+    id = Column(Integer, primary_key=True)
+    suggestion_id = Column(Integer, ForeignKey("suggestions.id", ondelete="CASCADE"), nullable=False, index=True)
+    decision = Column(String(16), nullable=False)
+    reason = Column(Text, nullable=True)
+    reviewer = Column(String(255), nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)

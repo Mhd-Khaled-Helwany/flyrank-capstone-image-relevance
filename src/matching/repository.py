@@ -1,6 +1,7 @@
 from __future__ import annotations
+from datetime import datetime
 from sqlalchemy.orm import Session
-from db.models import Image, ImageMetadata, ImageVector, Post, PostVector
+from db.models import Image, ImageMetadata, ImageVector, Post, PostVector, ReviewDecision, Suggestion
 
 REVIEW_CONFIDENCE_THRESHOLD = 0.75
 
@@ -121,3 +122,73 @@ def get_image_vectors_with_details(session: Session) -> list[tuple[ImageVector, 
         .order_by(ImageVector.image_id)
         .all()
     )
+
+def upsert_suggestion(
+    session: Session,
+    *,
+    post_id: int,
+    candidate: dict,
+    similarity_threshold: float | None = None,
+    confidence_threshold: float | None = None,
+) -> Suggestion:
+    """Insert or update the suggestion row for a (post, image) pairing.
+
+    Keyed by the unique (post_id, image_id) pair: re-materializing an existing
+    pairing refreshes the snapshot but keeps its review status.
+    """
+    row = (
+        session.query(Suggestion)
+        .filter(Suggestion.post_id == post_id, Suggestion.image_id == candidate["image_id"])
+        .one_or_none()
+    )
+    if row is None:
+        row = Suggestion(post_id=post_id, image_id=candidate["image_id"])
+        session.add(row)
+    row.similarity = candidate["similarity"]
+    row.confidence = candidate["confidence"]
+    row.subject = candidate["subject"]
+    row.category = candidate["category"]
+    row.caption = candidate["caption"]
+    row.similarity_threshold = similarity_threshold
+    row.confidence_threshold = confidence_threshold
+    session.flush()
+    return row
+
+def get_suggestion(session: Session, suggestion_id: int) -> Suggestion | None:
+    return session.get(Suggestion, suggestion_id)
+
+def list_suggestions(session: Session, status: str | None = None) -> list[Suggestion]:
+    query = session.query(Suggestion).order_by(Suggestion.id)
+    if status is not None:
+        query = query.filter(Suggestion.status == status)
+    return query.all()
+
+def record_decision(
+    session: Session,
+    *,
+    suggestion_id: int,
+    decision: str,
+    reason: str | None = None,
+    reviewer: str | None = None,
+) -> ReviewDecision:
+    """Append a decision to the review trail and move the suggestion's status."""
+    row = ReviewDecision(
+        suggestion_id=suggestion_id,
+        decision=decision,
+        reason=reason,
+        reviewer=reviewer,
+        created_at=datetime.utcnow(),
+    )
+    session.add(row)
+    suggestion = session.get(Suggestion, suggestion_id)
+    if suggestion is not None:
+        suggestion.status = decision
+    session.flush()
+    return row
+
+def list_decisions(session: Session, suggestion_id: int | None = None) -> list[ReviewDecision]:
+    """The full review trail, oldest first; optionally scoped to one suggestion."""
+    query = session.query(ReviewDecision).order_by(ReviewDecision.id)
+    if suggestion_id is not None:
+        query = query.filter(ReviewDecision.suggestion_id == suggestion_id)
+    return query.all()
