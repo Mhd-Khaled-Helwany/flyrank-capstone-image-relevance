@@ -220,15 +220,78 @@ Reading: the latin-name post still ranks the red-fox photo #1 out of 50 (`gemini
 
 Evidence:
 
+The wolf photo ranks #2 by similarity for the Red Fox post. Raising the similarity bar above the fox's 0.8637 via the eval/demo knob forces the guard walk past the fox, exposing the verdict it would give every runner-up:
+
+```
+$ curl -s "http://127.0.0.1:8000/posts/1/images?similarity_threshold=0.99"
+```
+
+output:
+
+```
+result: no_confident_match | reason: Similarity below threshold
+  redfox.jpg   sim=0.8637 guard=rejected: Similarity below threshold
+  wolf.jpg     sim=0.7869 guard=rejected: Subject mismatch: expected ['red fox'], detected wolf
+  deer.jpg     sim=0.7838 guard=rejected: Subject mismatch: expected ['red fox'], detected deer
+  owl.jpg      sim=0.7716 guard=rejected: Subject mismatch: expected ['red fox'], detected owl
+  horse.jpg    sim=0.7700 guard=rejected: Subject mismatch: expected ['red fox'], detected horse
+```
+
+`wolf.jpg` is explicitly rejected for the fox post — the wolf never reaches a human as a suggestion. At default thresholds the same walk simply stops at the accepted fox before wolf is ever considered.
+
+Automated coverage: `tests/test_guard.py::test_forced_wolf_candidate_rejected_on_fox_post` builds the (fox post, wolf image) pair directly and asserts `rejected` + `"Subject mismatch"` naming both subjects.
+
 2. Rejections include a human-readable explanation
 
 Evidence:
+
+Forcing deliberately wrong pairings through the guard prints one plain-language sentence per rejection type:
+
+```
+$ py evidence/rejection_reasons.py
+```
+
+output:
+
+```
+wrong category: laptop offered to an animal post
+  -> rejected: Category mismatch: expected ['animal'], detected electronic device
+wrong subject: wolf offered to the red-fox post
+  -> rejected: Subject mismatch: expected ['red fox'], detected wolf
+untrustworthy tag: basketball.jpg was tagged at 0.3 confidence
+  -> rejected: Tag confidence too low to trust
+```
+
+All rejection paths flow through the single source of explanations, `evaluate_candidate()` (`src/matching/guard.py:38-77`); the API attaches the same strings per ranked candidate (`guard` + `reason` fields) and the review API's inspect-why endpoint replays them.
+
+Automated coverage: `tests/test_guard.py::test_category_mismatch_rejected`, `::test_subject_mismatch_rejected`, `::test_confidence_gate_rejects`, `::test_similarity_gate_rejects`.
 
 3. When no image clears the bar, the system answers "no confident match" with reasons
 
 Evidence:
 
-## Backend 
+The Chess post names no category or subject any corpus image can satisfy; every candidate is rejected with its reason and the answer is "no confident match" instead of a forced pairing:
+
+```
+$ curl -s http://127.0.0.1:8000/posts/18/images
+```
+
+output:
+
+```
+no_confident_match
+reason: Category mismatch: expected none, detected electronic device
+suggestion: None
+  gamingconsole.jpg guard=rejected: Category mismatch: expected none, detected electronic device
+  laptop.jpg   guard=rejected: Category mismatch: expected none, detected electronic device
+  bookshelf.jpg guard=rejected: Category mismatch: expected none, detected furniture
+  basketball.jpg guard=rejected: Category mismatch: expected none, detected clothing
+  belt.jpg     guard=rejected: Category mismatch: expected none, detected clothing
+```
+
+(The Lions of the Serengeti post behaves identically with a subject-mismatch reason.) Automated coverage: `tests/test_guard.py::test_walk_all_rejected_yields_no_confident_match` and `tests/test_api.py::test_chess_post_no_confident_match`.
+
+## Backend
 
 1. Database models for images, tags, embeddings, posts, suggestions, approvals/rejections — with the required indexes
 
