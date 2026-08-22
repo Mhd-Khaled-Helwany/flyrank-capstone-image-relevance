@@ -4,13 +4,13 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
-from fastapi import Depends, FastAPI  # noqa: E402
-from sqlalchemy.orm import Session  # noqa: E402
-from api.dependencies import get_db  # noqa: E402
-from api.routes import images, posts, review  # noqa: E402
-from api.schemas import HealthResponse  # noqa: E402
-from db.models import Image, Post  # noqa: E402
-from matching.repository import get_image_vectors, get_post_vectors  # noqa: E402
+from fastapi import Depends, FastAPI  
+from sqlalchemy.orm import Session  
+from api.dependencies import get_db  
+from api.routes import images, posts, review  
+from api.schemas import HealthResponse  
+from db.models import Image, Post  
+from matching.repository import get_image_vectors, get_post_vectors
 
 
 def create_app() -> FastAPI:
