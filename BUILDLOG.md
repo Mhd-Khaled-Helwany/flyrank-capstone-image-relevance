@@ -8,6 +8,10 @@ No AI was used because that directory is simply for storage of all data.
 
 AI was fed information and design decisions for the project and it formatted an easy to reach structure for the md files.
 
+## Evidence folder
+
+AI wrote all of the files in this folder because it is easy to write code but very repetitive.
+
 ## Migrations folder
 
 AI scaffolded Alembic (`alembic init migrations`), wired `migrations/env.py`
@@ -35,7 +39,7 @@ Models.py was written with a good amount of help from AI by instructing it to de
 
 ### Matching folder
 
-AI was not used for anything in this folder
+AI was not used for anything in this folder.
 
 ### Telemetry folder
 

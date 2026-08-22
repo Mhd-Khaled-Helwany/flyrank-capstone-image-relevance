@@ -1,6 +1,6 @@
 """DoD §6 AI processing #2: confidence scan over tagged corpus + flagged rows.
 
-Run: .venv/bin/python evidence/confidence_scan.py
+Run: py evidence/confidence_scan.py
 
 Prints the confidence distribution of data/tags/*.json and any DB rows where
 needs_review = 1. Currently expects zero flagged images (clear-cut corpus);

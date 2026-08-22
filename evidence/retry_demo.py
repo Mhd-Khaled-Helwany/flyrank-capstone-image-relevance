@@ -1,6 +1,6 @@
 """DoD §6 AI processing #3: batch job retries transient failures, not refusals.
 
-Run: .venv/bin/python evidence/retry_demo.py
+Run: py evidence/retry_demo.py
 
 Simulates a flaky API (two timeouts, then success) and a policy refusal.
 The timeouting item is retried with backoff until it succeeds; the refused

@@ -5,6 +5,7 @@ This document is for the capstone reviewers of the internship to make it easier 
 ## AI processing
 
 1. Vision model produces structured output validated against a schema; invalid responses are never trusted
+
 Evidence:
 
 **(a) Real vision-model output is structured JSON** — every tagged image has a validated tag file under `data/tags/`, e.g. `data/tags/bamboo.json`:
@@ -32,7 +33,6 @@ output:
 {'valid': True, 'tag': {'subject': <Subject.red_fox: 'red fox'>, 'category': <Category.animal: 'animal'>, 'attributes': ['orange fur', 'wild', 'forest'], 'caption': 'A red fox standing in a forest', 'confidence': 0.94}}
 ```
 
-
 **(c) Invalid responses are rejected, never trusted** — the schema rejects unknown categories, subjects outside the closed 50-value enum, out-of-range confidence and missing fields:
 
 ```
@@ -55,6 +55,7 @@ In the batch job (`scripts/run_batch_tagging.py`, `real_worker`) a payload faili
 Automated coverage: `tests/test_vision_schema.py::test_valid_payload_passes` and `::test_invalid_payload_fails_cleanly` (both green, see Quality section for full-suite output).
 
 2. Low-confidence classifications are flagged instead of accepted
+
 Evidence:
 
 **Flagging mechanism (three places):**
@@ -75,6 +76,7 @@ image_metadata rows with needs_review=1: 1
 ```
 
 3. Images are processed through a batch background job with retries
+
 Evidence:
 
 **Batch + retry implementation** — `src/vision/processor.py`:
@@ -103,6 +105,7 @@ failed:    ['img_refused.jpg']
 `test_process_batch_retries_transient_failures_but_not_refusals` proves both directions: a timeouting item is retried (`attempts["bravo"] == 2`) and succeeds, while a policy refusal is given up on immediately (`attempts["charlie"] == 1`).
 
 4. Vision and embedding costs are tracked per call
+
 Evidence:
 
 **Per-call cost computation from the real API response** — `src/vision/gemini_client.py:56-64` reads `usage_metadata` (prompt/completion token counts) from every Gemini response and computes cost with production rates (`$0.000075/1k input`, `$0.0003/1k output`). Embedding calls do the same with their rates (`scripts/seed_embeddings.py`, `EMBEDDING_COST_PER_1K_INPUT`).
@@ -122,8 +125,8 @@ $ py evidence/cost_tracking_demo.py
 ```
 
 output:
-```
 
+```
 --- per-call records ---
 image 1: tokens=190 cost=$0.0000228000
 image 2: tokens=156 cost=$0.0000173250
@@ -138,37 +141,113 @@ Automated coverage: `tests/test_batch_processing.py::test_cost_tracking_summariz
 ## Matching system
 
 1. Image and post embeddings are stored; posts return ranked image suggestions
+
 Evidence:
 
+**(a) Embeddings are stored** — `image_vectors` and `post_vectors` hold one Gemini embedding per image caption / post body:
+
+```
+$ py evidence/ranked_suggestions.py
+```
+
+output:
+
+```
+stored embeddings: 50 image_vectors ['gemini-embedding-001'], 18 post_vectors ['gemini-embedding-001']
+
+post #1 "The Secret Life of the Red Fox" - top 5 ranked images:
+  1. redfox.jpg     subject=red fox    category=animal             similarity=0.8637
+  2. wolf.jpg       subject=wolf       category=animal             similarity=0.7869
+  3. deer.jpg       subject=deer       category=animal             similarity=0.7838
+  4. owl.jpg        subject=owl        category=animal             similarity=0.7716
+  5. horse.jpg      subject=horse      category=animal             similarity=0.7700
+```
+
+**(b) Posts return ranked suggestions over HTTP** — same data through `GET /posts/{id}/images` (start `fastapi dev src/api/main.py` first):
+
+```
+$ py evidence/http_ranked_suggestions.py
+```
+
+output:
+
+```
+1 "The Secret Life of the Red Fox" -> result=accepted
+  1. redfox.jpg     subject=red fox    similarity=0.8637 guard=accepted
+  2. wolf.jpg       subject=wolf       similarity=0.7869 guard=rejected
+  3. deer.jpg       subject=deer       similarity=0.7838 guard=rejected
+  4. owl.jpg        subject=owl        similarity=0.7716 guard=rejected
+  5. horse.jpg      subject=horse      similarity=0.7700 guard=rejected
+suggestion: redfox.jpg (red fox)
+```
+
+returns each ranked candidate with its guard verdict attached (see Safety layer section for a full transcript).
+
 2. Semantic matching works for equivalent concepts — "red fox" matches "Vulpes vulpes"
+
 Evidence:
+
+The Red Fox post body names the animal **only** by its scientific name; no image caption contains any latin name, so there is zero lexical overlap between query and matched text:
+
+```
+$ py evidence/semantic_equivalence.py
+```
+
+output:
+
+```
+post #1 body sentence: "As a wild animal, Vulpes vulpes -- its scientific name -- has adapted to everything from dense forests to city parks"
+image captions containing a latin name: 0/50 (zero lexical overlap)
+
+[stored vectors] ranking all images against the post embedding:
+  best: redfox.jpg -> red fox is rank #1 of 50
+    1. redfox.jpg     subject=red fox    similarity=0.8637
+    2. wolf.jpg       subject=wolf       similarity=0.7869
+    3. deer.jpg       subject=deer       similarity=0.7838
+
+[live embeddings] cosine_similarity(embed("red fox"), embed("Vulpes vulpes")) = 0.9261
+  embed("red fox") best-matches stored caption of redfox.jpg (red fox, sim=0.8945)
+  embed("Vulpes vulpes") best-matches stored caption of redfox.jpg (red fox, sim=0.8584)
+```
+
+Reading: the latin-name post still ranks the red-fox photo #1 out of 50 (`gemini-embedding-001` places the two phrasings at cosine 0.93), and both phrasings independently best-match the same stored caption — equivalent concepts converge on the same image despite different wording.
+
+(The script's part 2 makes two live embedding calls and needs `GEMINI_API_KEY`; without it part 1 still runs offline.)
 
 ## Safety layer
 
 1. The mismatch guard rejects incorrect recommendations — the wolf-on-a-fox-post scenario provably fails
+
 Evidence:
 
 2. Rejections include a human-readable explanation
+
 Evidence:
 
 3. When no image clears the bar, the system answers "no confident match" with reasons
+
 Evidence:
 
 ## Backend 
 
 1. Database models for images, tags, embeddings, posts, suggestions, approvals/rejections — with the required indexes
+
 Evidence:
 
 2. API endpoints validated; the review workflow (approve / reject / inspect why) exists
+
 Evidence:
 
 ## Quality and documentation
 
 1. Automated tests cover schema validation, mismatch rejection, and matching accuracy
+
 Evidence:
 
 2. A small labeled evaluation dataset measures top-1 precision — the number is in your README
+
 Evidence:
 
 3. README with architecture explanation and diagram; submission-pack files from § 11 present
+
 Evidence:

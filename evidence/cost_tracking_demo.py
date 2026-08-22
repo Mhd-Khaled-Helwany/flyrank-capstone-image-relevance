@@ -1,6 +1,6 @@
 """DoD §6 AI processing #4: vision/embedding costs are tracked per call.
 
-Run: .venv/bin/python evidence/cost_tracking_demo.py
+Run: py evidence/cost_tracking_demo.py
 
 Records two vision calls with the production Gemini rates and shows the
 per-call log lines plus the aggregated summary. The same record shape is

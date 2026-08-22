@@ -1,6 +1,6 @@
 """DoD §6 AI processing #1: invalid vision responses are rejected by the schema.
 
-Run: .venv/bin/python evidence/invalid_tag_rejected.py
+Run: py evidence/invalid_tag_rejected.py
 """
 import sys
 from pathlib import Path
